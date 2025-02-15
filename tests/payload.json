@@ -1,0 +1,7 @@
+{
+    "id": 0,
+    "name": "string",
+    "active": true,
+    "temperature": 0.0,
+    "tags": ["string"]
+}
