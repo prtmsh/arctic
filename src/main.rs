@@ -87,11 +87,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
     let stats = Arc::new(LoadTestStats::new());
 
     println!(r"
-    ___              __  _     
-   /   |  __________/ /_(_)____
-  / /| | / ___/ ___/ __/ / ___/
- / ___ |/ /  / /__/ /_/ / /__  
-/_/  |_/_/   \___/\__/_/\___/
+        ___              __  _     
+       /   |  __________/ /_(_)____
+      / /| | / ___/ ___/ __/ / ___/
+     / ___ |/ /  / /__/ /_/ / /__  
+    /_/  |_/_/   \___/\__/_/\___/
     ");
     println!("duration: {} seconds", duration);
     println!("endpoint: {}", endpoint);
