@@ -3,8 +3,54 @@ use rand::Rng;
 use reqwest::Error;
 use serde_json::{Value, Map, Number};
 use std::fs;
-use std::time::Duration;
-use tokio::time::sleep;
+use std::time::Instant;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+#[derive(Debug)]
+struct LoadTestStats {
+    total_requests: AtomicU64,
+    success_count: AtomicU64,
+    error_count: AtomicU64,
+    total_duration: AtomicU64,
+    start_time: Instant,
+}
+
+impl LoadTestStats {
+    fn new() -> Self {
+        LoadTestStats {
+            total_requests: AtomicU64::new(0),
+            success_count: AtomicU64::new(0),
+            error_count: AtomicU64::new(0),
+            total_duration: AtomicU64::new(0),
+            start_time: Instant::now(),
+        }
+    }
+
+    fn print_summary(&self) {
+        let total = self.total_requests.load(Ordering::SeqCst);
+        let success = self.success_count.load(Ordering::SeqCst);
+        let errors = self.error_count.load(Ordering::SeqCst);
+        let total_duration = self.start_time.elapsed().as_secs_f64();
+        let avg_rps = total as f64 / total_duration;
+
+        let avg_response_time = 
+        if total > 0 {
+            self.total_duration.load(Ordering::SeqCst) as f64 / total as f64
+        }
+        else {
+            0.0
+        };
+
+        println!("\n==== Load Test Summary ====");
+        println!("total duration:      {:.2}s", total_duration);
+        println!("total requests:      {}", total);
+        println!("successful requests: {}", success);
+        println!("failed requests:     {}", errors);
+        println!("requests per second: {:.2}", avg_rps);
+        println!("avg response time:   {:.2}ms", avg_response_time);
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>{
@@ -38,20 +84,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
 
     let schema = read_json_file(data_file)?;
     let start_time = std::time::Instant::now();
+    let stats = Arc::new(LoadTestStats::new());
 
     println!("starting arctic...");
     println!("duration: {} seconds", duration);
     println!("endpoint: {}", endpoint);
     println!("templates: {}", data_file);
 
-    while start_time.elapsed().as_secs() < duration {
-        let random_data = generate_random_data(&schema);
-        if let Err(e) = send_data(endpoint, random_data).await {
-            eprintln!("error sending data: {}", e);
-        }
-    }
+    let stats_clone = stats.clone();
+    let endpoint_clone = endpoint.clone();
+    let schema_clone = schema.clone();
 
-    println!("completed {} seconds of data transmission", duration);
+    tokio::spawn(async move {
+        while start_time.elapsed().as_secs() < duration {
+            let random_data = generate_random_data (&schema_clone);
+            let requests_start = Instant::now();
+
+            match send_data(&endpoint_clone, random_data).await {
+                Ok(_) => {
+                    stats_clone.success_count.fetch_add(1, Ordering::SeqCst);
+                }
+                Err(e) => {
+                    stats_clone.error_count.fetch_add(1, Ordering::SeqCst);
+                    eprintln!("error sending data: {}", e);
+                }
+            }
+
+            let duration = requests_start.elapsed().as_millis() as u64;
+            stats_clone.total_duration.fetch_add(duration, Ordering::SeqCst);
+            stats_clone.total_requests.fetch_add(1, Ordering::SeqCst);
+        }
+    }).await?;
+
+    stats.print_summary();
     Ok(())
 }
 
@@ -100,9 +165,6 @@ async fn send_data(endpoint: &str, data: Value) -> Result<(), Error> {
         .send()
         .await?;
 
-    if !response.status().is_success() {
-        eprintln!("server responded with: {}", response.status());
-    }
-
+    response.error_for_status()?;
     Ok(())
 }
