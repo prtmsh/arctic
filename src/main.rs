@@ -3,9 +3,11 @@ use rand::Rng;
 use reqwest::Error;
 use serde_json::{Value, Map, Number};
 use std::fs;
-use std::time::Instant;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use tokio::time::sleep;
+use std::io::{stdout, Write};
 
 #[derive(Debug)]
 struct LoadTestStats {
@@ -42,7 +44,7 @@ impl LoadTestStats {
             0.0
         };
 
-        println!("\n==== Load Test Summary ====");
+        println!("\n===== Load Test Summary =====");
         println!("total duration:      {:.2}s", total_duration);
         println!("total requests:      {}", total);
         println!("successful requests: {}", success);
@@ -101,7 +103,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
     let endpoint_clone = endpoint.clone();
     let schema_clone = schema.clone();
 
-    tokio::spawn(async move {
+    let is_running = Arc::new(AtomicBool::new(true));
+    let spinner_is_running = is_running.clone();
+
+    let spinner_handle = tokio::spawn(async move {
+        let spinner_frames = ["|", "/", "-", "\\"];
+        let mut i = 0;
+        
+        print!("\n");
+        while spinner_is_running.load(Ordering::SeqCst) {
+            print!("\rrunning... {}", spinner_frames[i]);
+            stdout().flush().ok();
+            i = (i+1)%spinner_frames.len();
+            sleep(Duration::from_millis(150)).await; 
+        }
+        print!("\rFinished!     \n");
+        stdout().flush().ok();
+    });
+
+    let load_test_handle = tokio::spawn(async move {
         while start_time.elapsed().as_secs() < duration {
             let random_data = generate_random_data (&schema_clone);
             let requests_start = Instant::now();
@@ -120,7 +140,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
             stats_clone.total_duration.fetch_add(duration, Ordering::SeqCst);
             stats_clone.total_requests.fetch_add(1, Ordering::SeqCst);
         }
-    }).await?;
+    });
+
+    load_test_handle.await?;
+    is_running.store(false, Ordering::SeqCst);
+    spinner_handle.await?;
 
     stats.print_summary();
     Ok(())
