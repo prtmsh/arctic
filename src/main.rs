@@ -1,7 +1,7 @@
-use clap::{Arg, Command}
+use clap::{Arg, Command};
 use rand::Rng;
 use reqwest::Error;
-use serde_json::{Value, Map};
+use serde_json::{Value, Map, Number};
 use std::fs;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -14,20 +14,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
         .arg(
             Arg::new("endpoint")
                 .short('e')
-                .long('endpoint')
+                .long("endpoint")
                 .required(true)
         )
         .arg(
             Arg::new("time")
                 .short('t')
-                .long('time')
+                .long("time")
                 .value_parser(clap::value_parser!(u64))
                 .required(true)
         )
         .arg(
             Arg::new("data")
                 .short('d')
-                .long('data')
+                .long("data")
                 .required(true)
         )
         .get_matches();
@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
         if let Err(e) = send_data(endpoint, random_data).await {
             eprintln!("error sending data: {}", e);
         }
-        sleep(Duration::from_secs(1)).await();
+        sleep(Duration::from_secs(1)).await;
     }
 
     println!("completed {} seconds of data transmission", duration);
@@ -58,8 +58,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
 
 fn read_json_file(path: &str) -> Result<Value, Box<dyn std::error::Error>>{
     let data = fs::read_to_string(path)?;
-    let json: Value = serde_json::from_str(&data);
-    Ok(json);
+    let json: Value = serde_json::from_str(&data)?;
+    Ok(json)
 }
 
 fn generate_random_data(schema: &Value) -> Value {
@@ -73,9 +73,12 @@ fn generate_random_data(schema: &Value) -> Value {
             }
             Value::Object(random_map)
         }
-        Value::String(s) if s == "string" => Value::String(rng.gen::<u32>().to_string()),
+        Value::String(_) => Value::String(rng.gen::<u32>().to_string()),
         Value::Number(n) if n.is_i64() => Value::Number(rng.gen::<i64>().into()),
-        Value::Number(n) if n.is_f64() => Value::Number(rng.gen::<f64>().into()),
+        Value::Number(n) if n.is_f64() => {
+            let num = rng.gen::<f64>();
+            Value::Number(Number::from_f64(num).unwrap_or_else(|| Number::from(0)))
+        },
         Value::Bool(_) => Value::Bool(rng.gen()),
         Value::Array(arr) => {
             let mut random_arr = Vec::new();
@@ -99,7 +102,7 @@ async fn send_data(endpoint: &str, data: Value) -> Result<(), Error> {
         .await?;
 
     if !response.status().is_success() {
-        eprintln("server responded with: {}", response.status());
+        eprintln!("server responded with: {}", response.status());
     }
 
     Ok(())
