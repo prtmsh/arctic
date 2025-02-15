@@ -110,14 +110,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
         let spinner_frames = ["|", "/", "-", "\\"];
         let mut i = 0;
         
+<<<<<<< HEAD
         print!("\n");
         while spinner_is_running.load(Ordering::SeqCst) {
             print!("\rrunning... {}", spinner_frames[i]);
+=======
+        while spinner_is_running.load(Ordering::SeqCst) {
+            print!("\rRunning... {}", spinner_frames[i]);
+>>>>>>> 7f395587592cb3204ce44fe11b968f5dfd790e5f
             stdout().flush().ok();
             i = (i+1)%spinner_frames.len();
             sleep(Duration::from_millis(150)).await; 
         }
+<<<<<<< HEAD
         print!("\rFinished!     \n");
+=======
+        print!("\rDone.     \n");
+>>>>>>> 7f395587592cb3204ce44fe11b968f5dfd790e5f
         stdout().flush().ok();
     });
 
