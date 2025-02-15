@@ -49,7 +49,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
         if let Err(e) = send_data(endpoint, random_data).await {
             eprintln!("error sending data: {}", e);
         }
-        sleep(Duration::from_secs(1)).await;
     }
 
     println!("completed {} seconds of data transmission", duration);
